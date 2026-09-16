@@ -5,7 +5,7 @@ per target; a visible outgoing bubble is not treated as recipient delivery.
 """
 
 import re
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from core.browser import get_browser
 from core.msg_builder import build_message
@@ -43,37 +43,54 @@ def verify_owner(page, username, unique_id):
     if str(unique_id).isdigit():
         page.get_by_text(exact_id_pattern(unique_id)).wait_for(timeout=config["browserTimeout"])
 
-def run_target(context, target, match_mode, mode, message):
-    search = context.new_page()
-    try:
-        with context.expect_page() as opened:
-            find_target_link(search, target, match_mode).click()
-        profile = opened.value
-        try:
-            profile.wait_for_load_state("domcontentloaded")
-            if match_mode == "short_id" or str(target).isdigit():
-                profile.get_by_text(exact_id_pattern(target)).wait_for(timeout=config["browserTimeout"])
-            profile.get_by_role("button", name="私信", exact=True).click()
-            editor = profile.locator('[contenteditable="true"]:visible')
-            editor.wait_for(timeout=config["browserTimeout"])
-            if editor.count() != 1:
-                raise RuntimeError("Chat input is ambiguous")
-            if mode == "smoke":
-                logger.info("SMOKE OK: target %s web chat opened; no message sent", target)
-                return
+def target_spec(target):
+    if not isinstance(target, dict):
+        return str(target), None
+    unique_id = str(target.get("unique_id", ""))
+    parsed = urlparse(str(target.get("profile_url", "")))
+    if (not unique_id.isdigit() or parsed.scheme != "https"
+            or parsed.netloc != "www.douyin.com"
+            or not re.fullmatch(r"/user/[A-Za-z0-9_-]+", parsed.path)):
+        raise ValueError("Target must have a numeric unique_id and a douyin.com profile_url")
+    return unique_id, f"{BASE_URL}{parsed.path}"
 
-            # Never auto-retry: a timeout after submission could duplicate a message.
-            visible_messages = profile.get_by_text(message, exact=True)
-            before = visible_messages.count()
-            editor.fill(message)
-            editor.press("Enter")
-            profile.wait_for_timeout(1200)
-            if editor.inner_text().strip("\u200b \r\n") or visible_messages.count() <= before:
-                raise RuntimeError("Submission uncertain; do not auto-retry")
-            logger.info("SUBMITTED_UNVERIFIED: target %s; check recipient app", target)
-        finally:
-            profile.close()
+
+def run_target(context, target, match_mode, mode, message):
+    target_id, profile_url = target_spec(target)
+    search = context.new_page()
+    profile = None
+    try:
+        if profile_url:
+            search.goto(profile_url)
+            profile = search
+        else:
+            with context.expect_page() as opened:
+                find_target_link(search, target_id, match_mode).click()
+            profile = opened.value
+        profile.wait_for_load_state("domcontentloaded")
+        if match_mode == "short_id" or target_id.isdigit():
+            profile.get_by_text(exact_id_pattern(target_id)).wait_for(timeout=config["browserTimeout"])
+        profile.get_by_role("button", name="私信", exact=True).click()
+        editor = profile.locator('[contenteditable="true"]:visible')
+        editor.wait_for(timeout=config["browserTimeout"])
+        if editor.count() != 1:
+            raise RuntimeError("Chat input is ambiguous")
+        if mode == "smoke":
+            logger.info("SMOKE OK: target %s web chat opened; no message sent", target_id)
+            return
+
+        # Never auto-retry: a timeout after submission could duplicate a message.
+        visible_messages = profile.get_by_text(message, exact=True)
+        before = visible_messages.count()
+        editor.fill(message)
+        editor.press("Enter")
+        profile.wait_for_timeout(1200)
+        if editor.inner_text().strip("\u200b \r\n") or visible_messages.count() <= before:
+            raise RuntimeError("Submission uncertain; do not auto-retry")
+        logger.info("SUBMITTED_UNVERIFIED: target %s; check recipient app", target_id)
     finally:
+        if profile is not None and profile != search:
+            profile.close()
         search.close()
 
 def run_tasks(mode):
