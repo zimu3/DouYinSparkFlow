@@ -2,6 +2,15 @@ name: DouYin Spark Flow One-time Test
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'smoke checks login and target without sending; send submits one message per target'
+        required: true
+        type: choice
+        default: smoke
+        options:
+          - smoke
+          - send
 
 permissions:
   contents: read
@@ -21,8 +30,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           playwright install chromium --with-deps --only-shell
-      - name: Send the configured one-time message
+      - name: Run ordinary Douyin web chat workflow
         env:
+          RUN_MODE: ${{ inputs.mode }}
           TASKS: ${{ vars.TASKS }}
           MATCH_MODE: ${{ vars.MATCH_MODE }}
           MESSAGE_TEMPLATE: ${{ vars.MESSAGE_TEMPLATE }}
