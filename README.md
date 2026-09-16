@@ -4,9 +4,11 @@
 
 本仓库的 main 分支使用普通抖音网页（www.douyin.com）私信路径。GitHub Actions 的 schedule.yml 只允许手动触发；默认 smoke 只检查登录账号、目标主页和私信输入框，不发送消息。明确选择 send 时，才对 TASKS 中每个目标提交一次消息。
 
-在 user-data Environment 中配置 TASKS，例如：`[{"username":"iv77o","unique_id":"32120635840","targets":["49237329641"]}]`
+在 `user-data` Environment 中配置 `TASKS`。推荐使用已核实主页的直达格式：`[{"username":"<发送账号昵称>","unique_id":"<发送账号抖音号>","targets":[{"unique_id":"<目标抖音号>","profile_url":"https://www.douyin.com/user/<目标主页标识>"}]}]`。运行时会在主页再次核对目标抖音号。
 
 MATCH_MODE 建议为 short_id。登录 Cookie 放在 COOKIES_32120635840 Secret，必须能登录 www.douyin.com；创作者中心专用 Cookie 不一定适用。不要将 Cookie 或令牌提交到仓库。
+
+GitHub 运行器的 [smoke 预检 #4](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35074614060) 已通过，日志显示打开了目标聊天且未发送消息。定时工作流保持禁用。
 
 send 之后出现 SUBMITTED_UNVERIFIED，只代表发送方网页出现消息，不代表对方已收到。首次先运行 smoke，再对单个目标测试，并到双方手机 APP 核对。
 
