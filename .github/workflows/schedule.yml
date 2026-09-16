@@ -1,4 +1,4 @@
-name: DouYin Spark Flow One-time Test
+name: DouYin Spark Flow Daily Trial
 
 on:
   workflow_dispatch:
@@ -11,9 +11,16 @@ on:
         options:
           - smoke
           - send
+  schedule:
+    - cron: '17 15 * * *'
+      timezone: 'Asia/Shanghai'
 
 permissions:
   contents: read
+
+concurrency:
+  group: douyin-32120635840
+  cancel-in-progress: false
 
 jobs:
   run-main:
@@ -32,7 +39,7 @@ jobs:
           playwright install chromium --with-deps --only-shell
       - name: Run ordinary Douyin web chat workflow
         env:
-          RUN_MODE: ${{ inputs.mode }}
+          RUN_MODE: ${{ github.event_name == 'schedule' && 'send' || inputs.mode }}
           TASKS: ${{ vars.TASKS }}
           MATCH_MODE: ${{ vars.MATCH_MODE }}
           MESSAGE_TEMPLATE: ${{ vars.MESSAGE_TEMPLATE }}
