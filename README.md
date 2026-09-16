@@ -1,5 +1,16 @@
 # DouYin Spark Flow
 
+## 当前 fork 的网页私信测试模式
+
+本仓库的 main 分支使用普通抖音网页（www.douyin.com）私信路径。GitHub Actions 的 schedule.yml 只允许手动触发；默认 smoke 只检查登录账号、目标主页和私信输入框，不发送消息。明确选择 send 时，才对 TASKS 中每个目标提交一次消息。
+
+在 user-data Environment 中配置 TASKS，例如：`[{"username":"iv77o","unique_id":"32120635840","targets":["49237329641"]}]`
+
+MATCH_MODE 建议为 short_id。登录 Cookie 放在 COOKIES_32120635840 Secret，必须能登录 www.douyin.com；创作者中心专用 Cookie 不一定适用。不要将 Cookie 或令牌提交到仓库。
+
+send 之后出现 SUBMITTED_UNVERIFIED，只代表发送方网页出现消息，不代表对方已收到。首次先运行 smoke，再对单个目标测试，并到双方手机 APP 核对。
+
+
 ![cover](docs/images/cover.png)
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
