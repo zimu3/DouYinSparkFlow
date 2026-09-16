@@ -1,44 +1,30 @@
-name: DouYin Spark Flow Schedule Run
+name: DouYin Spark Flow One-time Test
+
 on:
-  workflow_dispatch: # 允许手动触发
-  schedule: # 定时任务
-    - cron: "0 1 * * *" # 每天 1:00 UTC（对应北京时间 9:00）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   run-main:
     timeout-minutes: 20
     runs-on: ubuntu-latest
     environment: user-data
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    - name: Test Douyin Accessibility
-      run: |
-        curl -I https://creator.douyin.com/
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    - name: Ensure browsers are installed
-      run: playwright install chromium --with-deps --only-shell
-    - name: Export Github Environment Variables and Secrets to JSON
-      env:
-        VARS_JSON: ${{ toJson(vars) }}
-        SECRETS_JSON: ${{ toJson(secrets) }}
-      run: python utils/export_github_env.py
-    - name: Run DouYin Spark Flow
-      run: python main.py
-    - uses: actions/upload-artifact@v4
-      if: ${{ !cancelled() }}
-      with:
-        name: run-logs
-        path: logs/
-  workflow-keepalive:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    permissions:
-      actions: write
-    steps:
-      - uses: liskin/gh-workflow-keepalive@v1
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium --with-deps --only-shell
+      - name: Send the configured one-time message
+        env:
+          TASKS: ${{ vars.TASKS }}
+          MATCH_MODE: ${{ vars.MATCH_MODE }}
+          MESSAGE_TEMPLATE: ${{ vars.MESSAGE_TEMPLATE }}
+          COOKIES_32120635840: ${{ secrets.COOKIES_32120635840 }}
+        run: python main.py
