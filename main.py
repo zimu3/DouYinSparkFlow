@@ -5,6 +5,6 @@ if os.path.exists(".env"):
 
     load_dotenv(".env")
 
-from core.tasks import runTasks
+from core.web_tasks import run_tasks
 
-runTasks()
+run_tasks(os.getenv("RUN_MODE", "smoke"))
