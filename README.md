@@ -2,15 +2,15 @@
 
 ## 当前 fork 的网页私信测试模式
 
-本仓库的 main 分支使用普通抖音网页（`www.douyin.com`）私信路径。GitHub Actions 的 `schedule.yml` 已开启北京时间每天 15:17 的单目标自动发送试运行；手动触发默认 `smoke` 不发送，明确选择 `send` 才会手动发送。运行串行且单个目标不自动重试。
+本仓库的 main 分支使用普通抖音网页（`www.douyin.com`）私信路径。GitHub Actions 的 `schedule.yml` 设有北京时间每天 15:17 的单目标发送试运行；手动触发默认 `smoke` 不发送，明确选择 `send` 才会手动发送。运行串行且单个目标不自动重试。**目前这仍是试验功能，尚未证明能稳定送达，不可依赖其自动续火花。**
 
 在 `user-data` Environment 中配置 `TASKS`。推荐使用已核实主页的直达格式：`[{"username":"<发送账号昵称>","unique_id":"<发送账号抖音号>","targets":[{"unique_id":"<目标抖音号>","profile_url":"https://www.douyin.com/user/<目标主页标识>"}]}]`。运行时会在主页再次核对目标抖音号。
 
 MATCH_MODE 建议为 short_id。登录 Cookie 放在 COOKIES_32120635840 Secret，必须能登录 www.douyin.com；创作者中心专用 Cookie 不一定适用。不要将 Cookie 或令牌提交到仓库。
 
-GitHub 运行器的 [smoke 预检 #4](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35074614060) 已通过；[手动实发 #5](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35075222693) 出现发送方网页消息。接收方 APP 是否显示需另行核对。其他旧的定时工作流保持禁用。
+GitHub 运行器能识别发送账号和打开目标页面，但这不等于私信已登录。[测试 #16](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35318963907) 在发送方页面出现临时消息气泡后，重新打开私信触发登录面板；两端均未看到该测试消息。代码现会在发送前重开会话预检，并在发送后重开核验。其他旧的定时工作流保持禁用。
 
-send 之后出现 SUBMITTED_UNVERIFIED，只代表发送方网页出现消息，不代表对方已收到。首次先运行 smoke，再对单个目标测试，并到双方手机 APP 核对。
+只有 `PERSISTED_SENDER_SIDE` 才表示重新打开发送方会话后仍能看到消息，仍需接收方 APP 核对。Actions 绿色状态或临时气泡都不代表送达；一旦出现登录要求或结果不确定，程序会失败且不自动重试，以免重复发送。不要在仓库、Issue 或日志中公开 Cookie、二维码或登录令牌。
 
 
 ![cover](docs/images/cover.png)
