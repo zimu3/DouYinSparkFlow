@@ -80,7 +80,9 @@ def run_target(context, target, match_mode, mode, message):
     profile = None
     try:
         if profile_url:
-            search.goto(profile_url)
+            # Douyin can keep loading media/analytics long after the profile
+            # content is ready; waiting for the full load event can time out.
+            search.goto(profile_url, wait_until="domcontentloaded")
             profile = search
         else:
             with context.expect_page() as opened:
