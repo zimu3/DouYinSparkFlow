@@ -11,6 +11,11 @@ on:
         options:
           - smoke
           - send
+      test_message:
+        description: 'Optional one-time message for a manual send; scheduled runs keep MESSAGE_TEMPLATE'
+        required: false
+        type: string
+        default: ''
   schedule:
     - cron: '17 15 * * *'
       timezone: 'Asia/Shanghai'
@@ -42,6 +47,6 @@ jobs:
           RUN_MODE: ${{ github.event_name == 'schedule' && 'send' || inputs.mode }}
           TASKS: ${{ vars.TASKS }}
           MATCH_MODE: ${{ vars.MATCH_MODE }}
-          MESSAGE_TEMPLATE: ${{ vars.MESSAGE_TEMPLATE }}
+          MESSAGE_TEMPLATE: ${{ github.event_name == 'workflow_dispatch' && inputs.test_message != '' && inputs.test_message || vars.MESSAGE_TEMPLATE }}
           COOKIES_32120635840: ${{ secrets.COOKIES_32120635840 }}
         run: python main.py
