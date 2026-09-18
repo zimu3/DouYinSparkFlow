@@ -90,6 +90,29 @@ def ensure_messaging_login(page, submitted=False):
         )
 
 
+def open_fresh_chat(context, profile_url, target_id, match_mode, submitted=False):
+    """Reopen a chat to require a durable IM session before composing."""
+    for page in list(context.pages):
+        if not page.is_closed():
+            page.close()
+    fresh = context.new_page()
+    fresh.goto(profile_url, wait_until="domcontentloaded")
+    if match_mode == "short_id" or target_id.isdigit():
+        fresh.get_by_text(exact_id_pattern(target_id)).wait_for(
+            timeout=config["browserTimeout"]
+        )
+    ensure_messaging_login(fresh, submitted=submitted)
+    try:
+        fresh.get_by_role("button", name="私信", exact=True).click(timeout=10000)
+    except PlaywrightTimeoutError:
+        ensure_messaging_login(fresh, submitted=submitted)
+        raise
+    surface, editor = find_chat_editor(context, config["browserTimeout"])
+    ensure_messaging_login(fresh, submitted=submitted)
+    ensure_messaging_login(surface.page, submitted=submitted)
+    return surface, editor
+
+
 def find_chat_editor(context, timeout_ms):
     """Find the visible composer, including a newly opened page or iframe.
 
@@ -175,6 +198,13 @@ def run_target(context, target, match_mode, mode, message):
             logger.info("SMOKE OK: target %s web chat opened; no message sent", target_id)
             return
 
+        # A one-off chat can display an optimistic composer while its IM
+        # session is invalid. Require it to survive a fresh navigation before
+        # any text is entered or submitted.
+        verified_profile_url = profile_url or profile.url
+        chat_surface, editor = open_fresh_chat(
+            context, verified_profile_url, target_id, match_mode
+        )
         # Never auto-retry: a timeout after submission could duplicate a message.
         ensure_messaging_login(chat_surface.page)
         visible_messages = chat_surface.get_by_text(message, exact=True)
@@ -188,23 +218,9 @@ def run_target(context, target, match_mode, mode, message):
         # server never stores the message. Reopen in a fresh page to verify
         # that the message can be read back from the account's chat history.
         chat_surface.page.wait_for_timeout(3000)
-        verified_profile_url = profile_url or profile.url
-        for page in list(context.pages):
-            if not page.is_closed():
-                page.close()
-        fresh = context.new_page()
-        fresh.goto(verified_profile_url, wait_until="domcontentloaded")
-        if match_mode == "short_id" or target_id.isdigit():
-            fresh.get_by_text(exact_id_pattern(target_id)).wait_for(
-                timeout=config["browserTimeout"]
-            )
-        ensure_messaging_login(fresh, submitted=True)
-        try:
-            fresh.get_by_role("button", name="私信", exact=True).click(timeout=10000)
-        except PlaywrightTimeoutError:
-            ensure_messaging_login(fresh, submitted=True)
-            raise
-        fresh_surface, _ = find_chat_editor(context, config["browserTimeout"])
+        fresh_surface, _ = open_fresh_chat(
+            context, verified_profile_url, target_id, match_mode, submitted=True
+        )
         if fresh_surface.get_by_text(message, exact=True).count() == 0:
             raise RuntimeError(
                 "Outgoing bubble disappeared after reopening chat; "
