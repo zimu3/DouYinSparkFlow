@@ -80,6 +80,16 @@ class ChatInputUnavailable(RuntimeError):
     pass
 
 
+def ensure_messaging_login(page, submitted=False):
+    if page.locator('[id^="login-full-panel"]').is_visible():
+        stage = "after attempted submission" if submitted else "before submission"
+        raise RuntimeError(
+            f"Douyin messaging requested a fresh login {stage}; "
+            "the runner's Cookie session is insufficient for reliable sending. "
+            "Do not auto-retry"
+        )
+
+
 def find_chat_editor(context, timeout_ms):
     """Find the visible composer, including a newly opened page or iframe.
 
@@ -166,6 +176,7 @@ def run_target(context, target, match_mode, mode, message):
             return
 
         # Never auto-retry: a timeout after submission could duplicate a message.
+        ensure_messaging_login(chat_surface.page)
         visible_messages = chat_surface.get_by_text(message, exact=True)
         before = visible_messages.count()
         editor.fill(message)
@@ -187,7 +198,12 @@ def run_target(context, target, match_mode, mode, message):
             fresh.get_by_text(exact_id_pattern(target_id)).wait_for(
                 timeout=config["browserTimeout"]
             )
-        fresh.get_by_role("button", name="私信", exact=True).click()
+        ensure_messaging_login(fresh, submitted=True)
+        try:
+            fresh.get_by_role("button", name="私信", exact=True).click(timeout=10000)
+        except PlaywrightTimeoutError:
+            ensure_messaging_login(fresh, submitted=True)
+            raise
         fresh_surface, _ = find_chat_editor(context, config["browserTimeout"])
         if fresh_surface.get_by_text(message, exact=True).count() == 0:
             raise RuntimeError(
