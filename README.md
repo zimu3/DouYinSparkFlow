@@ -8,7 +8,7 @@
 
 MATCH_MODE 建议为 short_id。登录 Cookie 放在 COOKIES_32120635840 Secret，必须能登录 www.douyin.com；创作者中心专用 Cookie 不一定适用。不要将 Cookie 或令牌提交到仓库。
 
-GitHub 运行器能识别发送账号和打开目标页面，但这不等于私信已登录。[测试 #16](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35318963907) 在发送方页面出现临时消息气泡后，重新打开私信触发登录面板；两端均未看到该测试消息。代码现会在发送前重开会话预检，并在发送后重开核验。其他旧的定时工作流保持禁用。
+GitHub 运行器曾能识别发送账号和打开目标页面，但这不等于私信已登录。[测试 #16](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35318963907) 在发送方页面出现临时消息气泡后，重新打开私信触发登录面板；两端均未看到该测试消息。[测试 #17](https://github.com/zimu3/DouYinSparkFlow/actions/runs/35320055618) 则在发送前发现云端发送账号已经未登录，没有提交消息。代码现会在发送前重开会话预检，并在发送后重开核验。其他旧的定时工作流保持禁用。
 
 只有 `PERSISTED_SENDER_SIDE` 才表示重新打开发送方会话后仍能看到消息，仍需接收方 APP 核对。Actions 绿色状态或临时气泡都不代表送达；一旦出现登录要求或结果不确定，程序会失败且不自动重试，以免重复发送。不要在仓库、Issue 或日志中公开 Cookie、二维码或登录令牌。
 
