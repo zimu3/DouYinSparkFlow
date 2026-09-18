@@ -126,6 +126,7 @@ def find_chat_editor(context, timeout_ms):
         for page in context.pages:
             if page.is_closed():
                 continue
+            ensure_messaging_login(page)
             for frame in page.frames:
                 if frame.is_detached():
                     continue
@@ -149,6 +150,9 @@ def find_chat_editor(context, timeout_ms):
             raise RuntimeError("Chat input is ambiguous; no message was sent")
         time.sleep(0.5)
 
+    for page in context.pages:
+        if not page.is_closed():
+            ensure_messaging_login(page)
     page_count = len([page for page in context.pages if not page.is_closed()])
     frame_count = sum(len(page.frames) for page in context.pages if not page.is_closed())
     raise ChatInputUnavailable(
@@ -175,7 +179,12 @@ def run_target(context, target, match_mode, mode, message):
         if match_mode == "short_id" or target_id.isdigit():
             profile.get_by_text(exact_id_pattern(target_id)).wait_for(timeout=config["browserTimeout"])
         for attempt in range(2):
-            profile.get_by_role("button", name="私信", exact=True).click()
+            ensure_messaging_login(profile)
+            try:
+                profile.get_by_role("button", name="私信", exact=True).click(timeout=10000)
+            except PlaywrightTimeoutError:
+                ensure_messaging_login(profile)
+                raise
             try:
                 chat_surface, editor = find_chat_editor(
                     context, min(config["browserTimeout"], 20000) if attempt == 0
@@ -194,10 +203,6 @@ def run_target(context, target, match_mode, mode, message):
                     profile.get_by_text(exact_id_pattern(target_id)).wait_for(
                         timeout=config["browserTimeout"]
                     )
-        if mode == "smoke":
-            logger.info("SMOKE OK: target %s web chat opened; no message sent", target_id)
-            return
-
         # A one-off chat can display an optimistic composer while its IM
         # session is invalid. Require it to survive a fresh navigation before
         # any text is entered or submitted.
@@ -205,6 +210,9 @@ def run_target(context, target, match_mode, mode, message):
         chat_surface, editor = open_fresh_chat(
             context, verified_profile_url, target_id, match_mode
         )
+        if mode == "smoke":
+            logger.info("SMOKE OK: target %s web chat survived fresh reopen; no message sent", target_id)
+            return
         # Never auto-retry: a timeout after submission could duplicate a message.
         ensure_messaging_login(chat_surface.page)
         visible_messages = chat_surface.get_by_text(message, exact=True)
