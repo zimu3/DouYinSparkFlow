@@ -92,10 +92,11 @@ def ensure_messaging_login(page, submitted=False):
 
 def open_fresh_chat(context, profile_url, target_id, match_mode, submitted=False):
     """Reopen a chat to require a durable IM session before composing."""
-    for page in list(context.pages):
+    pages = [page for page in context.pages if not page.is_closed()]
+    fresh = pages[0] if pages else context.new_page()
+    for page in pages[1:]:
         if not page.is_closed():
             page.close()
-    fresh = context.new_page()
     fresh.goto(profile_url, wait_until="domcontentloaded")
     if match_mode == "short_id" or target_id.isdigit():
         fresh.get_by_text(exact_id_pattern(target_id)).wait_for(
