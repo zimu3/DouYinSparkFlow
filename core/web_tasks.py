@@ -9,6 +9,7 @@ import time
 from urllib.parse import quote, urlparse
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import Error as PlaywrightError
 
 from core.browser import get_browser
 from core.msg_builder import build_message
@@ -89,12 +90,25 @@ def find_chat_editor(context, timeout_ms):
             if page.is_closed():
                 continue
             for frame in page.frames:
+                if frame.is_detached():
+                    continue
                 editor = frame.locator('[contenteditable="true"]:visible')
-                if editor.count():
+                try:
+                    count = editor.count()
+                except PlaywrightError:
+                    # Douyin replaces its chat iframe while loading. A stale
+                    # frame is safe to skip here: no send has been attempted.
+                    if frame.is_detached() or page.is_closed():
+                        continue
+                    raise
+                if count > 1:
+                    raise RuntimeError("Chat input is ambiguous; no message was sent")
+                if count == 1:
                     matches.append((frame, editor))
-        if len(matches) == 1 and matches[0][1].count() == 1:
+        matches = [(frame, editor) for frame, editor in matches if not frame.is_detached()]
+        if len(matches) == 1:
             return matches[0]
-        if len(matches) > 1 or (matches and matches[0][1].count() > 1):
+        if len(matches) > 1:
             raise RuntimeError("Chat input is ambiguous; no message was sent")
         time.sleep(0.5)
 
