@@ -7,6 +7,8 @@ per target; a visible outgoing bubble is not treated as recipient delivery.
 import re
 from urllib.parse import quote, urlparse
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
 from core.browser import get_browser
 from core.msg_builder import build_message
 from utils.config import get_config, get_userData
@@ -38,10 +40,27 @@ def find_target_link(page, target, match_mode):
 
 
 def verify_owner(page, username, unique_id):
-    page.goto(f"{BASE_URL}/user/self")
-    page.get_by_role("heading", name=username, exact=True).wait_for(timeout=config["browserTimeout"])
-    if str(unique_id).isdigit():
-        page.get_by_text(exact_id_pattern(unique_id)).wait_for(timeout=config["browserTimeout"])
+    page.goto(f"{BASE_URL}/user/self", wait_until="domcontentloaded")
+    # The nickname heading can change with Douyin page revisions. The exact
+    # Douyin ID is the stable account identity when one is configured.
+    identity = (
+        page.get_by_text(exact_id_pattern(unique_id))
+        if str(unique_id).isdigit()
+        else page.get_by_role("heading", name=username, exact=True)
+    )
+    try:
+        identity.wait_for(timeout=min(config["browserTimeout"], 35000))
+    except PlaywrightTimeoutError as exc:
+        if (page.get_by_role("heading", name="未登录", exact=True).is_visible()
+                or page.get_by_role("button", name="登录", exact=True).is_visible()):
+            raise RuntimeError(
+                "Douyin sender is not logged in on the GitHub runner; "
+                "refresh the COOKIES_<UNIQUE_ID> environment secret"
+            ) from exc
+        raise RuntimeError(
+            "Douyin sender identity could not be verified; "
+            "the page may have changed or failed to load. No message was sent"
+        ) from exc
 
 def target_spec(target):
     if not isinstance(target, dict):
