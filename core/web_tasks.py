@@ -5,6 +5,7 @@ per target; a visible outgoing bubble is not treated as recipient delivery.
 """
 
 import re
+import time
 from urllib.parse import quote, urlparse
 
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -74,6 +75,37 @@ def target_spec(target):
     return unique_id, f"{BASE_URL}{parsed.path}"
 
 
+def find_chat_editor(context, timeout_ms):
+    """Find the visible composer, including a newly opened page or iframe.
+
+    A profile's 私信 button does not consistently mount the composer in the
+    profile's main frame. Keep the diagnostics deliberately content-free:
+    Actions logs are visible to repository readers.
+    """
+    deadline = time.monotonic() + timeout_ms / 1000
+    while time.monotonic() < deadline:
+        matches = []
+        for page in context.pages:
+            if page.is_closed():
+                continue
+            for frame in page.frames:
+                editor = frame.locator('[contenteditable="true"]:visible')
+                if editor.count():
+                    matches.append((frame, editor))
+        if len(matches) == 1 and matches[0][1].count() == 1:
+            return matches[0]
+        if len(matches) > 1 or (matches and matches[0][1].count() > 1):
+            raise RuntimeError("Chat input is ambiguous; no message was sent")
+        time.sleep(0.5)
+
+    page_count = len([page for page in context.pages if not page.is_closed()])
+    frame_count = sum(len(page.frames) for page in context.pages if not page.is_closed())
+    raise RuntimeError(
+        f"Chat input unavailable after opening 私信 (pages={page_count}, "
+        f"frames={frame_count}); no message was sent"
+    )
+
+
 def run_target(context, target, match_mode, mode, message):
     target_id, profile_url = target_spec(target)
     search = context.new_page()
@@ -92,27 +124,24 @@ def run_target(context, target, match_mode, mode, message):
         if match_mode == "short_id" or target_id.isdigit():
             profile.get_by_text(exact_id_pattern(target_id)).wait_for(timeout=config["browserTimeout"])
         profile.get_by_role("button", name="私信", exact=True).click()
-        editor = profile.locator('[contenteditable="true"]:visible')
-        editor.wait_for(timeout=config["browserTimeout"])
-        if editor.count() != 1:
-            raise RuntimeError("Chat input is ambiguous")
+        chat_surface, editor = find_chat_editor(context, config["browserTimeout"])
         if mode == "smoke":
             logger.info("SMOKE OK: target %s web chat opened; no message sent", target_id)
             return
 
         # Never auto-retry: a timeout after submission could duplicate a message.
-        visible_messages = profile.get_by_text(message, exact=True)
+        visible_messages = chat_surface.get_by_text(message, exact=True)
         before = visible_messages.count()
         editor.fill(message)
         editor.press("Enter")
-        profile.wait_for_timeout(1200)
+        chat_surface.page.wait_for_timeout(1200)
         if editor.inner_text().strip("\u200b \r\n") or visible_messages.count() <= before:
             raise RuntimeError("Submission uncertain; do not auto-retry")
         logger.info("SUBMITTED_UNVERIFIED: target %s; check recipient app", target_id)
     finally:
-        if profile is not None and profile != search:
-            profile.close()
-        search.close()
+        for page in list(context.pages):
+            if not page.is_closed():
+                page.close()
 
 def run_tasks(mode):
     if mode not in ("smoke", "send"):
