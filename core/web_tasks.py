@@ -173,7 +173,28 @@ def run_target(context, target, match_mode, mode, message):
         chat_surface.page.wait_for_timeout(1200)
         if editor.inner_text().strip("\u200b \r\n") or visible_messages.count() <= before:
             raise RuntimeError("Submission uncertain; do not auto-retry")
-        logger.info("SUBMITTED_UNVERIFIED: target %s; check recipient app", target_id)
+        # The web UI inserts an optimistic outgoing bubble even when the
+        # server never stores the message. Reopen in a fresh page to verify
+        # that the message can be read back from the account's chat history.
+        chat_surface.page.wait_for_timeout(3000)
+        verified_profile_url = profile_url or profile.url
+        for page in list(context.pages):
+            if not page.is_closed():
+                page.close()
+        fresh = context.new_page()
+        fresh.goto(verified_profile_url, wait_until="domcontentloaded")
+        if match_mode == "short_id" or target_id.isdigit():
+            fresh.get_by_text(exact_id_pattern(target_id)).wait_for(
+                timeout=config["browserTimeout"]
+            )
+        fresh.get_by_role("button", name="私信", exact=True).click()
+        fresh_surface, _ = find_chat_editor(context, config["browserTimeout"])
+        if fresh_surface.get_by_text(message, exact=True).count() == 0:
+            raise RuntimeError(
+                "Outgoing bubble disappeared after reopening chat; "
+                "server persistence unverified. Do not auto-retry"
+            )
+        logger.info("PERSISTED_SENDER_SIDE: target %s; recipient still needs checking", target_id)
     finally:
         for page in list(context.pages):
             if not page.is_closed():
