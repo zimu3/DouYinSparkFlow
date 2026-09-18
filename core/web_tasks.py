@@ -76,6 +76,10 @@ def target_spec(target):
     return unique_id, f"{BASE_URL}{parsed.path}"
 
 
+class ChatInputUnavailable(RuntimeError):
+    pass
+
+
 def find_chat_editor(context, timeout_ms):
     """Find the visible composer, including a newly opened page or iframe.
 
@@ -114,7 +118,7 @@ def find_chat_editor(context, timeout_ms):
 
     page_count = len([page for page in context.pages if not page.is_closed()])
     frame_count = sum(len(page.frames) for page in context.pages if not page.is_closed())
-    raise RuntimeError(
+    raise ChatInputUnavailable(
         f"Chat input unavailable after opening 私信 (pages={page_count}, "
         f"frames={frame_count}); no message was sent"
     )
@@ -137,8 +141,26 @@ def run_target(context, target, match_mode, mode, message):
         profile.wait_for_load_state("domcontentloaded")
         if match_mode == "short_id" or target_id.isdigit():
             profile.get_by_text(exact_id_pattern(target_id)).wait_for(timeout=config["browserTimeout"])
-        profile.get_by_role("button", name="私信", exact=True).click()
-        chat_surface, editor = find_chat_editor(context, config["browserTimeout"])
+        for attempt in range(2):
+            profile.get_by_role("button", name="私信", exact=True).click()
+            try:
+                chat_surface, editor = find_chat_editor(
+                    context, min(config["browserTimeout"], 20000) if attempt == 0
+                    else config["browserTimeout"]
+                )
+                break
+            except ChatInputUnavailable:
+                if attempt == 1:
+                    raise
+                logger.info("CHAT_REOPEN: chat input not ready; no message entered or sent")
+                for page in list(context.pages):
+                    if page != profile and not page.is_closed():
+                        page.close()
+                profile.reload(wait_until="domcontentloaded")
+                if match_mode == "short_id" or target_id.isdigit():
+                    profile.get_by_text(exact_id_pattern(target_id)).wait_for(
+                        timeout=config["browserTimeout"]
+                    )
         if mode == "smoke":
             logger.info("SMOKE OK: target %s web chat opened; no message sent", target_id)
             return
